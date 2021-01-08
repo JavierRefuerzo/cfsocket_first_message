@@ -12,7 +12,7 @@ class ViewController: UIViewController {
         createSocket()
     }
     @IBAction func didTapSendMessageButton(_ sender: Any) {
-        sendMessage()
+        buildMessage()
     }
     @IBAction func didTapCloseSockettButton(_ sender: Any) {
         closeSocket()
@@ -51,24 +51,54 @@ class ViewController: UIViewController {
         print("Socket closed")
     }
     
-    private func sendMessage() {
-        guard let socket = socket, let addrData = addrData else {
+    private func buildMessage() {
+        guard let _ = socket, let _ = addrData else {
             print("Socket not created")
             return
         }
         
         // build the search message
-        let message = "Hello Cruel World!\r\nCoucou monde cruel\r\n"
-        guard let messageData = message.data(using: .utf8) else {
-            print("Failed to build the message")
-            return
-        }
+        let messageData = """
+               M-SEARCH * HTTP/1.1
+               HOST: 239.255.255.250:1900
+               MAN: ssdp:discover
+               MX: 1
+               ST: urn:udi-com:device:X_Insteon_Lighting_Device:1
+               """.data(using: .utf8)
 
-        // send the message
-        if CFSocketSendData(socket, addrData, messageData as CFData, 0) == .success {
+        sendMessage(messageData: messageData!)
+
+    }
+    
+    private func sendMessage(messageData: Data){
+        if CFSocketSendData(socket, addrData, (messageData as CFData), 0) == .success {
             print("Message sent with success")
+            createListener()
         } else {
             print("Failed to send the message. errno: \(errno)")
+            //this only appears to happen on phisical device and not emulator
+            if errno == 65 {
+                print("Resend message as it has failed")
+                buildMessage()
+            }
+        }
+    }
+    
+    
+    private func createListener(){
+        print("createListner")
+        DispatchQueue.main.async {
+            var responseBuffer = Array<UInt8>(repeating: 0, count: 1024)
+            let nativeSocket = CFSocketGetNative(self.socket)
+            responseBuffer.withUnsafeMutableBytes{ unsafeRawBufferPointer in
+                let rawPtr = unsafeRawBufferPointer.baseAddress
+                let result = Darwin.recv(nativeSocket, rawPtr, 4096, 0)
+                if result >= 0 {
+                    print("response size: \(result)")
+                    let output = String(bytes: unsafeRawBufferPointer, encoding: .utf8)
+                    print (output!)
+                }
+            }
         }
     }
 }
