@@ -20,6 +20,8 @@ class ViewController: UIViewController {
     
     private var socket: CFSocket?
     private var addrData: CFData?
+    
+    var retries = 0
 
     private func createSocket() {
         guard socket == nil else {
@@ -78,8 +80,14 @@ class ViewController: UIViewController {
             print("Failed to send the message. errno: \(errno)")
             //this only appears to happen on phisical device and not emulator
             if errno == 65 {
-                print("Resend message as it has failed")
-                buildMessage()
+                if retries < 10 {
+                    retries = retries + 1
+                    print("Resend message as it has failed")
+                    buildMessage()
+                }else {
+                    print("Error Too many retires. This may happen if CONNECT TO DEVICES ON YOUR LOCAL NETWORK was not accepted by uers or is waiting for acceptance")
+                }
+                
             }
         }
     }
@@ -87,7 +95,8 @@ class ViewController: UIViewController {
     
     private func createListener(){
         print("createListner")
-        DispatchQueue.main.async {
+        let dispatchQueue = DispatchQueue.global(qos: .background)
+        dispatchQueue.async { [self] in
             var responseBuffer = Array<UInt8>(repeating: 0, count: 1024)
             let nativeSocket = CFSocketGetNative(self.socket)
             responseBuffer.withUnsafeMutableBytes{ unsafeRawBufferPointer in
